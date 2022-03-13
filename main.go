@@ -40,8 +40,24 @@ func main() {
 	}
 }
 
+const explain = `
+Consider using https://github.com/FiloSottile/mkcert 
+to create a trusted proxy CA. Run 
+mkcert -CAROOT 
+to get the path of the root CA files.
+openssl x509 -in rootCA.pem -inform pem -outform der -out rootCA.der 
+to convert it. And then import it into your Java keystore, 
+because the bazel http_archive download is implemented in Java:
+keytool -importcert -alias bazel-proxy-relay -keystore <path here>/cacerts \
+ -storepass changeit -file rootCA.der
+Then set the HTTP_PROXY and HTTPS_PROXY variables
+and bazel shutdown to make sure it'll restart with the new configuration.
+Afterwards, all Bazel downloads will be proxied through this 
+local (unsecured) HTTP proxy which MITMs SSL connections 
+so that it can rewrite all of the downloads 
+to go through the remote (secure) HTTPS proxy.`
+
 func run(cmd *cobra.Command, args []string) error {
-	const explain = "Consider using https://github.com/FiloSottile/mkcert to create a trusted proxy CA."
 	ca_cert, err := ioutil.ReadFile(MitmCaCertificate)
 	if os.IsNotExist(err) {
 		log.Fatalf("Could not read CA certificate from %s. %s", MitmCaCertificate, explain)
@@ -89,6 +105,6 @@ func run(cmd *cobra.Command, args []string) error {
 		return req, resp
 	})
 	fmt.Println("Listening on", ListenServerPort)
-	fmt.Println("Configure Baze with:", fmt.Sprintf("HTTP_PROXY=%s HTTPS_PROXY=%s", ListenServerPort, ListenServerPort))
+	fmt.Println("Configure Bazel with:", fmt.Sprintf("HTTP_PROXY=http://%s HTTPS_PROXY=http://%s", ListenServerPort, ListenServerPort))
 	return http.ListenAndServe(ListenServerPort, httpproxy)
 }
